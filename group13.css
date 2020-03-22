@@ -1,0 +1,11 @@
+html,
+body,
+.container-fluid {
+  height: 100%;
+}
+.stretch {
+    flex: 1;
+}
+svg {
+    border: 1px solid red;
+}
