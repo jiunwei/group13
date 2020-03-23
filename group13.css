@@ -12,6 +12,13 @@ body,
 .hidden {
   display: none;
 }
+.ghost {
+  opacity: 0.5;
+}
 svg {
   border: 1px solid red;
+}
+text {
+  cursor: default;
+  font-size: 3px;
 }

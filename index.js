@@ -4,10 +4,15 @@ $(function() {
     const EARTH_RADIUS = 6731;
     const svg = d3.select('svg')
     const svg_all = svg.append('g');
-    const sg_layer = svg_all.append('g').append('path');
+    const sg_layer = svg_all.append('g')
+        .append('path')
+        .attr('fill', 'rgba(0, 0, 0, 0.1)')
+        .attr('stroke', 'rgba(0, 0, 0, 0.2)');
     const hud_layer = svg_all.append('g').append('path');
     const hdbs_layer = svg_all.append('g');
     const schs_layer = svg_all.append('g');
+    const lbls_layer = svg_all.append('g');
+    const geoCircle = d3.geoCircle();
     const zoom = d3.zoom()
         .scaleExtent([1, 8])
         .on("zoom", function() {
@@ -55,22 +60,75 @@ $(function() {
         });
     });
 
-    var geoCircle = d3.geoCircle();
+    function add_label(x, y, text) {
+        var lines = text.split('\n');
+        for (var i = 0; i < lines.length; ++i) {
+            lbls_layer.append('text')
+                .attr('x', x)
+                .attr('y', y)
+                .attr('dy', i * 3)
+                .attr('text-anchor', 'middle')
+                .attr('stroke', 'white')
+                .attr('stroke-width', 1)
+                .text(lines[i]);
+            lbls_layer.append('text')
+                .attr('x', x)
+                .attr('y', y)
+                .attr('dy', i * 3)
+                .attr('text-anchor', 'middle')
+                .attr('fill', 'black')
+                .text(lines[i]);
+        }
+    }
+
     function update_hud() {
+        lbls_layer.selectAll('*').remove();
         if (settings.schs_selected === null) {
             hud_layer.attr('fill', 'transparent');
             return;
         }
+
         var item = settings.schs_selected;
+        var sch_latlong = [item.longitude, item.latitude];
         var radius = settings.radius / EARTH_RADIUS * 180 / Math.PI;
-        var circle = geoCircle.center([item.longitude, item.latitude]).radius(radius);
+        var circle = geoCircle.center(sch_latlong).radius(radius);
         hud_layer.datum(circle())
             .attr('fill', 'rgba(0, 128, 0, 0.1)')
             .attr('d', path);
+
+        var hdb_min = null;
+        var hdb_max = null;
+        for (var i = 0; i < hdbs.length; ++i) {
+            var hdb = hdbs[i];
+            if (hdb.resale_price === null) continue;
+            if (settings.hdbs_flat_type !== null && hdb.flat_type !== settings.hdbs_flat_type) continue;
+            var hdb_latlong = [hdb.longitude, hdb.latitude];
+            if (d3.geoDistance(sch_latlong, hdb_latlong) * EARTH_RADIUS <= settings.radius) {
+                if (hdb_min === null || (hdb.resale_price < hdb_min.resale_price)) {
+                    hdb_min = hdb;
+                }
+                if (hdb_max === null || (hdb.resale_price > hdb_max.resale_price)) {
+                    hdb_max = hdb;
+                }
+            }
+        }
+
+        if (hdb_min !== null) {
+            var hdb_min_xy = projection([hdb_min.longitude, hdb_min.latitude]);
+            add_label(hdb_min_xy[0], hdb_min_xy[1] - 9, hdb_min.blk_no + ' ' + hdb_min.street + '\n' + hdb_min.flat_type + '\nMinimum Price: $' + hdb_min.resale_price);
+        }
+        if (hdb_max != null) {
+            var hdb_max_xy = projection([hdb_max.longitude, hdb_max.latitude]);
+            add_label(hdb_max_xy[0], hdb_max_xy[1] - 9, hdb_max.blk_no + ' ' + hdb_max.street + '\n' + hdb_max.flat_type + '\nMaximum Price: $' + hdb_max.resale_price);
+        }
+
+        // var center = projection(sch_latlong);
+        // add_label(center[0], center[1] - 6, item.school_name);
     }
 
     function reset_zoom() {
         settings.schs_selected = null;
+        update();
         update_hud();
         svg.transition().duration(750).call(
             zoom.transform,
@@ -85,17 +143,20 @@ $(function() {
         path = d3.geoPath(projection);
 
         sg_layer.datum(sg)
-            .attr('fill', 'rgba(0, 0, 0, 0.1)')
-            .attr('stroke', 'rgba(0, 0, 0, 0.2)')
             .attr('d', path);
         
         hdbs_layer.selectAll('circle')
             .data(hdbs)
-            .join('circle')
-            .attr('data-toggle', 'tooltip')
-            .attr('title', function(item) {
-                return item.blk_no + ' ' + item.street;
-            })
+            .join(
+                enter => enter.append('circle')
+                    .attr('data-toggle', 'tooltip')
+                    .attr('r', function(item) {
+                        return 0.5;
+                    })
+                    .attr('title', function(item) {
+                        return item.blk_no + ' ' + item.street;
+                    })
+            )
             .attr('fill', function(item) {
                 if (item.resale_price === null || (settings.hdbs_flat_type !== null && item.flat_type !== settings.hdbs_flat_type)) {
                     return 'transparent';
@@ -107,15 +168,15 @@ $(function() {
             })
             .attr('cy', function(item) {
                 return projection([item.longitude, item.latitude])[1];
-            })
-            .attr('r', function(item) {
-                return 0.5;
             });
         
         schs_layer.selectAll('circle')
             .data(schs)
             .join('circle')
             .classed('clickable', true)
+            .classed('ghost', function(item) {
+                return settings.schs_selected !== null && settings.schs_selected.school_name !== item.school_name;
+            })
             .attr('fill', function(item) {
                 return schs_scale(item.vacancies);
             })
@@ -140,7 +201,6 @@ $(function() {
                     return;
                 }
                 settings.schs_selected = item;
-                update_hud();
 
                 var radius = 3 / EARTH_RADIUS * 180 / Math.PI;
                 var circle = geoCircle.center([item.longitude, item.latitude]).radius(radius);
@@ -154,6 +214,9 @@ $(function() {
                         .translate(-(x0 + x1) / 2, -(y0 + y1) / 2),
                     d3.mouse(svg.node())
                 );
+
+                update();
+                update_hud();
             });
 
         $('[data-toggle="tooltip"]').tooltip();
@@ -185,6 +248,7 @@ $(function() {
             settings.hdbs_flat_type = selection;
         }
         update();
+        update_hud();
     });
     $('#radius').on('change', function(e) {
         settings.radius = $(this).val();
