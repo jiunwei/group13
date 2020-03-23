@@ -4,8 +4,11 @@ body,
   height: 100%;
 }
 .stretch {
-    flex: 1;
+  flex: 1;
+}
+.clickable {
+  cursor: pointer;
 }
 svg {
-    border: 1px solid red;
+  border: 1px solid red;
 }

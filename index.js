@@ -16,9 +16,7 @@ $(function() {
             svg_all.attr("stroke-width", 1 / transform.k);
         });
     svg.call(zoom);
-
-    var projection, path;
-    var sg, schs, hdbs;
+    svg.on('click', reset_zoom);
 
     var settings = {
         radius: 2,
@@ -26,7 +24,9 @@ $(function() {
         schs_selected: null
     }
 
-    var geoCircle = d3.geoCircle();
+    var svg_rect;
+    var projection, path;
+    var sg, schs, hdbs;
 
     var load_sg = $.getJSON('data/singapore.json', function(data) {
         sg = data;
@@ -55,6 +55,7 @@ $(function() {
         });
     });
 
+    var geoCircle = d3.geoCircle();
     function update_hud() {
         if (settings.schs_selected === null) {
             hud_layer.attr('fill', 'transparent');
@@ -63,31 +64,30 @@ $(function() {
         var item = settings.schs_selected;
         var radius = settings.radius / EARTH_RADIUS * 180 / Math.PI;
         var circle = geoCircle.center([item.longitude, item.latitude]).radius(radius);
-        hud_layer
+        hud_layer.datum(circle())
             .attr('fill', 'rgba(0, 128, 0, 0.1)')
-            .attr('d', function(item) {
-                return path(circle());
-            });
+            .attr('d', path);
+    }
+
+    function reset_zoom() {
+        settings.schs_selected = null;
+        update_hud();
+        svg.transition().duration(750).call(
+            zoom.transform,
+            d3.zoomIdentity,
+            d3.zoomTransform(svg.node()).invert([svg_rect.width / 2, svg_rect.height / 2])
+        );
     }
 
     function update() {
-        var svg_rect = rect = svg.node().getBoundingClientRect();
+        svg_rect = rect = svg.node().getBoundingClientRect();
         projection = d3.geoEquirectangular().fitSize([svg_rect.width, svg_rect.height], sg);
         path = d3.geoPath(projection);
 
         sg_layer.datum(sg)
             .attr('fill', 'rgba(0, 0, 0, 0.1)')
             .attr('stroke', 'rgba(0, 0, 0, 0.2)')
-            .attr('d', path)
-            .on('click', function(e) {
-                settings.schs_selected = null;
-                update_hud();
-                svg.transition().duration(750).call(
-                    zoom.transform,
-                    d3.zoomIdentity,
-                    d3.zoomTransform(svg.node()).invert([svg_rect.width / 2, svg_rect.height / 2])
-                );
-            });
+            .attr('d', path);
         
         hdbs_layer.selectAll('circle')
             .data(hdbs)
@@ -111,6 +111,7 @@ $(function() {
         schs_layer.selectAll('circle')
             .data(schs)
             .join('circle')
+            .classed('clickable', true)
             .attr('fill', function(item) {
                 return schs_scale(item.vacancies);
             })
@@ -130,6 +131,10 @@ $(function() {
             })
             .on('click', function(e) {
                 var item = this.__data__;
+                if (settings.schs_selected !== null && settings.schs_selected.school_name == item.school_name) {
+                    reset_zoom();
+                    return;
+                }
                 settings.schs_selected = item;
                 update_hud();
 
@@ -151,10 +156,6 @@ $(function() {
     }
 
     var hdbs_extents, hdbs_scale, schs_extents, schs_scale;
-    function inverse_interpolateBlues(t) {
-        return d3.interpolateBlues(1 - t);
-    }
-
     $.when(load_sg, load_hdbs, load_schs).then(function() {
         hdbs_extents = d3.extent(hdbs, function(item) {
             return item.resale_price;
@@ -163,7 +164,7 @@ $(function() {
         schs_extents = d3.extent(schs, function(item) {
             return item.vacancies;
         });
-        schs_scale = d3.scaleSequential(schs_extents, inverse_interpolateBlues);
+        schs_scale = d3.scaleSequential(schs_extents, d3.interpolateBlues);
         update();
     });
 
