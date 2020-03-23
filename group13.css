@@ -9,6 +9,9 @@ body,
 .clickable {
   cursor: pointer;
 }
+.hidden {
+  display: none;
+}
 svg {
   border: 1px solid red;
 }

@@ -92,6 +92,10 @@ $(function() {
         hdbs_layer.selectAll('circle')
             .data(hdbs)
             .join('circle')
+            .attr('data-toggle', 'tooltip')
+            .attr('title', function(item) {
+                return item.blk_no + ' ' + item.street;
+            })
             .attr('fill', function(item) {
                 if (item.resale_price === null || (settings.hdbs_flat_type !== null && item.flat_type !== settings.hdbs_flat_type)) {
                     return 'transparent';
@@ -156,6 +160,9 @@ $(function() {
     }
 
     var hdbs_extents, hdbs_scale, schs_extents, schs_scale;
+    function inverse_interpolateBlues(t) {
+        return d3.interpolateBlues(1 - t);
+    }
     $.when(load_sg, load_hdbs, load_schs).then(function() {
         hdbs_extents = d3.extent(hdbs, function(item) {
             return item.resale_price;
@@ -164,7 +171,7 @@ $(function() {
         schs_extents = d3.extent(schs, function(item) {
             return item.vacancies;
         });
-        schs_scale = d3.scaleSequential(schs_extents, d3.interpolateBlues);
+        schs_scale = d3.scaleSequential(schs_extents, inverse_interpolateBlues);
         update();
     });
 
